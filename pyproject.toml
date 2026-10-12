@@ -1,0 +1,52 @@
+[build-system]
+requires = ["flit_core >=3.2,<4"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "offline2online_gcrl"
+version = "1.0.0"
+requires-python = ">=3.10"
+description = "Offline-to-Online Goal-Conditioned RL with JAX and Brax"
+
+dependencies = [
+    "jax[cuda12] >= 0.4.38",
+    "brax >= 0.12.1",
+    "mujoco >= 3.2.7",
+    "mujoco-mjx >= 3.2.7",
+    "flax >= 0.10.2",
+    "optax",
+    "distrax >= 0.1.5",
+    "jaxopt",
+    "ml_collections",
+    "absl-py",
+    "pyyaml",
+    "numpy < 2",
+    "matplotlib",
+    "moviepy == 1.0.3",
+    "tqdm",
+    "wandb",
+]
+
+authors = [
+    { name = "Vishal Kashyap" },
+]
+maintainers = [
+    { name = "Vishal Kashyap", email = "vkashyap1007@gmail.com" }
+]
+
+
+[project.optional-dependencies]
+dev = ["ruff"]
+
+[tool.flit.sdist]
+include = [
+    "offline2online_gcrl/environments/assets/*.xml"
+]
+
+
+[tool.ruff]
+target-version = "py310"
+line-length = 200
+
+[tool.ruff.format]
+quote-style = "single"

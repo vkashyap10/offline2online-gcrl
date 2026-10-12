@@ -1,0 +1,21 @@
+# Exact versions used for the reported runs (Python 3.10, CUDA 12).
+jax[cuda12]==0.4.38
+jaxlib==0.4.38
+brax==0.12.1
+mujoco==3.2.7
+mujoco-mjx==3.2.7
+flax==0.10.2
+optax==0.2.4
+chex==0.1.88
+distrax==0.1.5
+tensorflow-probability==0.25.0
+orbax-checkpoint==0.10.3
+jaxopt==0.8.5
+numpy==1.26.4
+ml_collections==1.0.0
+absl-py==2.1.0
+PyYAML==6.0.2
+wandb==0.19.4
+moviepy==1.0.3
+matplotlib
+tqdm

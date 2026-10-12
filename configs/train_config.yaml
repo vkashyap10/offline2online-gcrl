@@ -1,0 +1,34 @@
+project_name: my_project # Name of project for wandb logs.
+experiment_name: test_run # Group for wandb logs
+job_name: job_001 # Name of job for wandb logs
+log_wandb: True
+
+env_name: arm_binpick_easy
+dataset_name: arm_binpick_easy_randomize_noisy_filtered
+dataset_folder: ./offline2online_gcrl/data_generation/data/
+max_offline_transitions: null # Use only the first N transitions of the dataset (e.g. 100000 for quick local runs). null uses all.
+
+seed: 42
+goal_conditioning: 1
+episode_length: 201
+action_repeat: 1
+num_envs: 5
+num_eval_envs: 5
+
+# The agent is chosen on the command line: --offline_agent=offline2online_gcrl/impls/agents/<agent>.py
+# The same agent is trained offline and then fine-tuned online.
+
+unroll_length: 1005
+seed_steps: 5000
+offline_train_steps: 50000
+online_train_steps: 50000
+num_training_iterations_per_epoch: 10
+num_training_steps_per_iteration: 2
+online_replay_buffer_size: 500000
+action_sample_temperature: 0.2
+insert_only_successful_episodes: False
+
+eval_interval: 1
+save_interval: 100
+visualization_interval: 1 # Render an HTML rollout every N epochs. 0 disables rendering.
+save_dir: ./offline2online_gcrl/impls/exp/

@@ -1,0 +1,16 @@
+__pycache__/
+dist/
+*.py[cod]
+*$py.class
+*.egg-info/
+.DS_Store
+.idea/
+.ruff_cache/
+.ipynb_checkpoint*
+offline2online_gcrl/impls/exp/
+impls/wandb/
+offline2online_gcrl/data_generation/exp/
+offline2online_gcrl/data_generation/data/
+wandb
+.vscode/
+.venv/
