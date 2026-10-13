@@ -16,11 +16,6 @@ and adds:
 - optional filtering of online experience so that only episodes that reach their goal enter the online buffer;
 - a scripted demonstration generator for a Franka Panda pick-and-place task.
 
-<p align="center">
-  <img src="docs/figures/rollout.gif" width="420" alt="Fine-tuned policy picking up the cube and placing it on the target"/>
-</p>
-<p align="center"><em>A fine-tuned GCIVL policy picks up the cube (dark green) and places it on the goal (light green).</em></p>
-
 ## How it works
 
 1. **Offline phase.** The agent trains on the offline buffer only. Each sample is a trajectory segment; for every
