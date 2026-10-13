@@ -83,7 +83,7 @@ def create_evaluator(train_config, agent, eval_env, eval_key):
             else:
                 dist = agent.network.select("actor")(states, params=params, temperature=temperature)
             actions = dist.sample(seed=key_sample)
-            actions = jnp.clip(actions, -0.9999, 0.9999)  # modified to work with tanh_squash
+            actions = jnp.clip(actions, -1, 1)
             extras = {}
             return actions, extras
 

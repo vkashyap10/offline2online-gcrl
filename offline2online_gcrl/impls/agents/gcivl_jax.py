@@ -85,7 +85,7 @@ class GCIVLAgentJAX(flax.struct.PyTreeNode):
             actor_info.update(
                 {
                     "mse": jnp.mean((dist.mode() - batch.action) ** 2),
-                    # 'std': jnp.mean(dist.scale_diag), # modified: the dist object does not have scale_diag dfined when state_dependent_std is set to True
+                    "std": jnp.mean(dist.scale_diag),
                 }
             )
 
@@ -134,58 +134,6 @@ class GCIVLAgentJAX(flax.struct.PyTreeNode):
         # return a new agent
         return GCIVLAgentJAX(network=new_network, config=self.config), info
 
-    # TODO: add with pmap_axis_name
-    # @jax.jit
-    # def update_high_utd(
-    #     self,
-    #     batch
-    # ) -> Tuple["GCIVLAgentJAX", dict]:
-    #     """
-    #     Fast JITted high-UTD version of `.update`.
-
-    #     Splits the batch into minibatches, performs `utd_ratio` critic updates,
-    #     and then one actor update.
-
-    #     Batch dimension must be divisible by `utd_ratio`.
-    #     """
-    #     batch_size = batch["rewards"].shape[0]
-    #     assert (
-    #         batch_size % self.config['utd'] == 0
-    #     ), f"Batch size {batch_size} must be divisible by UTD ratio {self.config['utd']}"
-    #     minibatch_size = batch_size // self.config["utd"]
-
-    #     def scan_body(carry: Tuple[GCIVLAgentJAX], data: Tuple[dict]):
-    #         (agent,) = carry
-    #         (minibatch,) = data
-    #         agent, info = agent.update(
-    #             minibatch,
-    #             networks_to_update=frozenset({"value"}),  # Updating value network only
-    #         )
-    #         return (agent,), info
-
-    #     # Reshape the batch for UTD updates
-    #     def make_minibatch(data: jnp.ndarray):
-    #         return jnp.reshape(data, (self.config["utd"], minibatch_size) + data.shape[1:])
-
-    #     minibatches = jax.tree_map(make_minibatch, batch)
-
-    #     # Perform UTD updates for value network
-    #     (agent,), value_infos = jax.lax.scan(scan_body, (self,), (minibatches,))
-
-    #     # Aggregate information from value updates
-    #     value_infos = jax.tree_map(lambda x: jnp.mean(x, axis=0), value_infos)
-
-    #     # Perform a single actor update after all value updates
-    #     agent, actor_infos = agent.update(
-    #         batch,
-    #         networks_to_update=frozenset({"actor"}),
-    #     )
-
-    #     # Merge the two info dictionaries
-    #     infos = {**value_infos, **actor_infos}
-
-    #     return agent, infos
-
     @jax.jit
     def sample_actions(
         self,
@@ -198,7 +146,7 @@ class GCIVLAgentJAX(flax.struct.PyTreeNode):
         dist = self.network.select("actor")(observations, goals, temperature=temperature)
         actions = dist.sample(seed=seed)
         if not self.config["discrete"]:
-            actions = jnp.clip(actions, -0.9999, 0.9999)  # modified to work with tanh_squash
+            actions = jnp.clip(actions, -1, 1)
         return actions
 
     @classmethod
@@ -255,10 +203,9 @@ class GCIVLAgentJAX(flax.struct.PyTreeNode):
                 actor_def = GCActor(
                     hidden_dims=config["actor_hidden_dims"],
                     action_dim=action_dim,
-                    state_dependent_std=True,  # modified
+                    state_dependent_std=False,
                     const_std=config["const_std"],
                     gc_encoder=encoders.get("actor"),
-                    tanh_squash=True,  # modified: constrain actions to (-1,1)
                 )
 
             network_info = dict(
@@ -283,6 +230,8 @@ class GCIVLAgentJAX(flax.struct.PyTreeNode):
 
 
 def get_config():
+    # Goals are relabelled by the replay buffer (TrajectoryUniformSamplingQueue.flatten_gcrl_fn), so OGBench's
+    # GCDataset goal-sampling options do not apply here.
     config = ml_collections.ConfigDict(
         dict(
             # Agent hyperparameters.
@@ -299,20 +248,6 @@ def get_config():
             const_std=True,  # Whether to use constant standard deviation for the actor.
             discrete=False,  # Whether the action space is discrete.
             encoder=ml_collections.config_dict.placeholder(str),  # Visual encoder name (None, 'impala_small', etc.).
-            # Dataset hyperparameters.
-            dataset_class="GCDataset",  # Dataset class name.
-            value_p_curgoal=0.2,  # Probability of using the current state as the value goal.
-            value_p_trajgoal=0.5,  # Probability of using a future state in the same trajectory as the value goal.
-            value_p_randomgoal=0.3,  # Probability of using a random state as the value goal.
-            value_geom_sample=True,  # Whether to use geometric sampling for future value goals.
-            actor_p_curgoal=0.0,  # Probability of using the current state as the actor goal.
-            actor_p_trajgoal=1.0,  # Probability of using a future state in the same trajectory as the actor goal.
-            actor_p_randomgoal=0.0,  # Probability of using a random state as the actor goal.
-            actor_geom_sample=False,  # Whether to use geometric sampling for future actor goals.
-            gc_negative=True,  # Whether to use '0 if s == g else -1' (True) or '1 if s == g else 0' (False) as reward.
-            p_aug=0.0,  # Probability of applying image augmentation.
-            frame_stack=ml_collections.config_dict.placeholder(int),  # Number of frames to stack.
-            utd=4,  # update-to-data ratio of the critic while training online
             metrics=[
                 "training/value/value_loss",  # metrics to record using wandb
                 "training/value/v_mean",

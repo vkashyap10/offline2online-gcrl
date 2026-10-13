@@ -14,17 +14,15 @@ from offline2online_gcrl.impls.utils.training import train_fn
 FLAGS = flags.FLAGS
 flags.DEFINE_string("train_config_path", "./configs/train_config.yaml", "Folder with offline dataset")
 
-config_flags.DEFINE_config_file("offline_agent", "offline2online_gcrl/impls/agents/gcivl_jax.py", lock_config=False)
-config_flags.DEFINE_config_file("online_agent", "offline2online_gcrl/impls/agents/gcivl_jax.py", lock_config=False)
+# The same agent is trained offline and then fine-tuned online.
+config_flags.DEFINE_config_file("agent", "offline2online_gcrl/impls/agents/gcivl_jax.py", lock_config=False)
 
 
 def main(_):
     # set up configs
     train_config = load_config(FLAGS.train_config_path)
 
-    # TODO: switch between offline and onilne configs based on training mode
-    offline_agent_config = FLAGS.offline_agent
-    online_agent_config = FLAGS.online_agent
+    agent_config = FLAGS.agent
 
     metrics_to_collect = [
         "eval/episode_success",
@@ -48,7 +46,7 @@ def main(_):
         train_config.job_name,
     )
     os.makedirs(train_config.save_dir, exist_ok=True)
-    metrics_to_collect.extend(offline_agent_config["metrics"])  # online agent?
+    metrics_to_collect.extend(agent_config["metrics"])
     metrics_recorder = MetricsRecorder(
         train_config.offline_train_steps + train_config.online_train_steps,
         metrics_to_collect,
@@ -65,7 +63,7 @@ def main(_):
         mode="online" if train_config.log_wandb else "disabled",
     )
 
-    train_fn(train_config, offline_agent_config, online_agent_config, progress_fn)
+    train_fn(train_config, agent_config, progress_fn)
 
 
 if __name__ == "__main__":

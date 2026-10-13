@@ -164,7 +164,7 @@ def setup_offline_replay_buffer(
 ):
     offline_train_data = load_offline_data(train_config.dataset_folder, train_config.dataset_name, train_config.get("max_offline_transitions"))
     offline_train_data = reshape_offline_data_for_pmap(offline_train_data, num_local_devices_to_use, num_envs=train_config.num_envs)
-    offline_train_data["action"] = jnp.clip(offline_train_data["action"], -0.999, 0.999)  # clip for tanhsquash
+    offline_train_data["action"] = jnp.clip(offline_train_data["action"], -1, 1)
 
     ## create offline replay buffer sized to hold the whole dataset and initialise state
     rows_per_device = offline_train_data["observation"].shape[1]
@@ -260,10 +260,17 @@ def prepare_transitions_for_training(train_config, agent_config, env, transition
         (transitions_1, transitions_2, sampling_key_1, sampling_key_2),
     )
 
-    transitions = jax.tree_util.tree_map(lambda x, y: jnp.concatenate([x, y], axis=1), transitions_1, transitions_2)
+    ## Mix the two sources: a fraction `offline_data_ratio` of the batch comes from transitions_1 (offline buffer).
+    # Each source provides `pool` transitions; draw without replacement when a source has enough, otherwise with.
+    transitions_1, transitions_2 = (jax.tree_util.tree_map(lambda x: jnp.reshape(x, (-1,) + x.shape[2:]), t) for t in (transitions_1, transitions_2))
+    pool = len(transitions_1.observation)
+    num_offline = int(round(train_config.get("offline_data_ratio", 0.5) * 2 * pool))
+    experience_key, key_1, key_2 = jax.random.split(experience_key, 3)
+    idx_1 = jax.random.choice(key_1, pool, (num_offline,), replace=num_offline > pool)
+    idx_2 = jax.random.choice(key_2, pool, (2 * pool - num_offline,), replace=2 * pool - num_offline > pool)
+    transitions = jax.tree_util.tree_map(lambda x, y: jnp.concatenate([x[idx_1], y[idx_2]]), transitions_1, transitions_2)
 
     ## Shuffle transitions and reshape them into (number_of_sgd_steps, batch_size, ...)
-    transitions = jax.tree_util.tree_map(lambda x: jnp.reshape(x, (-1,) + x.shape[2:], order="F"), transitions)
     permutation = jax.random.permutation(experience_key, len(transitions.observation))
     transitions = jax.tree_util.tree_map(lambda x: x[permutation], transitions)
     transitions = jax.tree_util.tree_map(

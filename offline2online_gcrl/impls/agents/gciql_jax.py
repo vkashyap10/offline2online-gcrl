@@ -179,7 +179,7 @@ class GCIQLAgentJAX(flax.struct.PyTreeNode):
         dist = self.network.select("actor")(observations, goals, temperature=temperature)
         actions = dist.sample(seed=seed)
         if not self.config["discrete"]:
-            actions = jnp.clip(actions, -0.9999, 0.9999)  # keep inside the open interval of tanh_squash
+            actions = jnp.clip(actions, -1, 1)
         return actions
 
     @classmethod
@@ -251,14 +251,12 @@ class GCIQLAgentJAX(flax.struct.PyTreeNode):
                 gc_encoder=encoders.get("actor"),
             )
         else:
-            # Same actor as GCIVLAgentJAX: state-dependent std and tanh squashing to keep actions in (-1, 1).
             actor_def = GCActor(
                 hidden_dims=config["actor_hidden_dims"],
                 action_dim=action_dim,
-                state_dependent_std=True,
+                state_dependent_std=False,
                 const_std=config["const_std"],
                 gc_encoder=encoders.get("actor"),
-                tanh_squash=True,
             )
 
         network_info = dict(

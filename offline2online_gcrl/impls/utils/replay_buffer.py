@@ -267,9 +267,12 @@ class TrajectoryUniformSamplingQueue(QueueBase[Sample], Generic[Sample]):
 
         goal_index = jax.random.categorical(sample_key, jnp.log(probs))
 
-        terminate = jnp.zeros(seq_len - 1, dtype=jnp.float32).at[goal_index[:-1]].set(1.0)
-        rewards = jnp.where(terminate > 0.0, 1.0, 0.0)  # reward when goal state reached
-        masks = jnp.where(terminate > 0, 0, 1)
+        # Transition i reaches its own goal when the goal is the next state.
+        terminate = jnp.equal(goal_index[:-1], arrangement[:-1] + 1).astype(jnp.float32)
+        # OGBench convention (gc_negative): -1 per step, 0 on reaching the goal. Values then count steps to the goal,
+        # which is the scale OGBench's AWR temperatures (e.g. GCIVL alpha=10) are tuned for.
+        rewards = terminate - 1.0
+        masks = jnp.where(terminate > 0, 0, 1)  # int, matching flatten_rl_fn so both lax.cond branches agree
 
         future_state = jnp.take(transition.observation, goal_index[:-1], axis=0)  # the last goal_index cannot be considered as there is no future.
         # future_action = jnp.take(transition.action, goal_index[:-1], axis=0)

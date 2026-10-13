@@ -1,5 +1,7 @@
+import pickle
 import time
 
+import flax
 import jax
 import jax.numpy as jnp
 from absl import logging
@@ -29,9 +31,19 @@ def setup_rng(seed, num_envs, num_local_devices_to_use, process_id):
     return agent_key, local_key, rb_key, offline_rb_key, env_keys, eval_key
 
 
-def train_fn(train_config, offline_agent_config, online_agent_config, progress_fn):
-    agent_config = offline_agent_config
+def save_checkpoint(path, network):
+    """Save the full training state (params, optimizer state, step counters) of an unreplicated network."""
+    with open(path, "wb") as f:
+        pickle.dump(flax.serialization.to_state_dict(jax.device_get(network)), f)
 
+
+def load_checkpoint(path, network):
+    """Restore a training state saved by save_checkpoint into a network with the same structure."""
+    with open(path, "rb") as f:
+        return flax.serialization.from_state_dict(network, pickle.load(f))
+
+
+def train_fn(train_config, agent_config, progress_fn):
     # Reproducibility preparation for (optional) multi-GPU training
     process_id = jax.process_index()
     num_local_devices_to_use = jax.local_device_count()
@@ -52,8 +64,10 @@ def train_fn(train_config, offline_agent_config, online_agent_config, progress_f
     num_env_steps_per_experience = train_config.num_envs * train_config.unroll_length
     num_env_steps_per_epoch = train_config.num_training_iterations_per_epoch * num_env_steps_per_experience
     num_prefill_experiences = train_config.seed_steps // num_env_steps_per_experience + 1
-    offline_training_epochs = train_config.offline_train_steps // num_env_steps_per_epoch + 1
-    online_training_epochs = train_config.online_train_steps // num_env_steps_per_epoch + 1
+    # restore_checkpoint skips the offline phase; online_train_steps == 0 skips the online phase.
+    restore_path = train_config.get("restore_checkpoint")
+    offline_training_epochs = 0 if restore_path else train_config.offline_train_steps // num_env_steps_per_epoch + 1
+    online_training_epochs = train_config.online_train_steps // num_env_steps_per_epoch + 1 if train_config.online_train_steps > 0 else 0
     logging.info("Seed steps: %s", train_config.seed_steps)
     logging.info("offline training epochs: %s", offline_training_epochs)
     logging.info("online training epochs: %s", online_training_epochs)
@@ -84,6 +98,9 @@ def train_fn(train_config, offline_agent_config, online_agent_config, progress_f
 
     ## Create agent, init training state and replicate training state across devices
     agent = create_agent(config=agent_config, rng=agent_key, env=env, dummy_transition=dummy_transition, goal_conditioning=train_config.goal_conditioning, pretrained_agent=None)
+    if restore_path:
+        logging.info("restoring training state from %s", restore_path)
+        agent = agent.replace(network=load_checkpoint(restore_path, agent.network))
     agent = jax.device_put_replicated(agent, jax.local_devices()[:num_local_devices_to_use])
     del agent_key
 
@@ -242,6 +259,10 @@ def train_fn(train_config, offline_agent_config, online_agent_config, progress_f
         # 1 if training online
         train_online = jnp.full((num_local_devices_to_use,), epoch_num >= offline_training_epochs, dtype=jnp.int32)
 
+        # Save the offline-trained state so online variants can start from it (see restore_checkpoint).
+        if epoch_num == offline_training_epochs and offline_training_epochs > 0 and process_id == 0 and train_config.save_dir:
+            save_checkpoint(f"{train_config.save_dir}/offline_checkpoint.pkl", _unpmap(agent.network))
+
         # seed replay buffer when training online for the first time.
         if epoch_num == offline_training_epochs:
             logging.info("seeding online buffer")
@@ -289,6 +310,14 @@ def train_fn(train_config, offline_agent_config, online_agent_config, progress_f
                 logging.info(metrics)
                 do_render = train_config.visualization_interval > 0 and (epoch_num % train_config.visualization_interval) == 0
                 progress_fn(epoch_num + 2, metrics, make_policy, _unpmap(agent.network.params), unwrapped_eval_env, do_render)
+
+    # Offline-only run: save the offline-trained state.
+    if online_training_epochs == 0 and process_id == 0 and train_config.save_dir:
+        save_checkpoint(f"{train_config.save_dir}/offline_checkpoint.pkl", _unpmap(agent.network))
+
+    # Save the final policy and critic params
+    if process_id == 0 and train_config.save_dir:
+        save_params(f"{train_config.save_dir}/final.pkl", _unpmap(agent.network.params))
 
     # Final validity checks
     # Verify number of steps is sufficient

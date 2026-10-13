@@ -45,6 +45,18 @@ class MetricsRecorder:
             self.y_data[key].append(value)
             self.y_data_err[key].append(metrics.get(f"{key}_std", 0))
 
+    def write_csv(self):
+        """Append the latest values of the collected metrics to <exp_dir>/metrics.csv."""
+        path = os.path.join(self.exp_dir, "metrics.csv")
+        columns = ["step"] + list(self.metrics_to_collect)
+        latest = {key: values[-1] for key, values in self.y_data.items()}
+        latest["step"] = self.x_data[-1]
+        new_file = not os.path.exists(path)
+        with open(path, "a") as f:
+            if new_file:
+                f.write(",".join(columns) + "\n")
+            f.write(",".join(str(float(latest.get(key, float("nan")))) for key in columns) + "\n")
+
     def log_wandb(self):
         data_to_log = {}
         for key, value in self.y_data.items():
@@ -96,6 +108,7 @@ class MetricsRecorder:
             {key: value for key, value in metrics.items() if key in self.metrics_to_collect},
         )
         self.log_wandb()
+        self.write_csv()
         self.print_progress()
 
     @staticmethod

@@ -10,7 +10,11 @@ dist/
 offline2online_gcrl/impls/exp/
 impls/wandb/
 offline2online_gcrl/data_generation/exp/
-offline2online_gcrl/data_generation/data/
+# Generated datasets are ignored, except the .npz datasets used for the reported results.
+offline2online_gcrl/data_generation/data/*
+!offline2online_gcrl/data_generation/data/arm_binpick_easy_EEF_goal_thresh_0.01.npz
+!offline2online_gcrl/data_generation/data/arm_binpick_easy_EEF_lowsuccess_20k.npz
+!offline2online_gcrl/data_generation/data/arm_binpick_easy_EEF_failuresonly_20k.npz
 wandb
 .vscode/
 .venv/
